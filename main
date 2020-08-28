@@ -11,12 +11,53 @@ set -x
 mkdir -p output
 chmod -R +w output
 
-time singularity exec -e docker://brainlife/dipy:1.1.1 dipy_fit_dti \
+NO_SLR=$(jq -r .no_slr config.json)
+
+if $NO_SLR
+then
+    NO_SLR="--no_slr"
+else
+    NO_SLR=""
+fi
+
+REFINE=$(jq -r .refine config.json)
+
+if $REFINE
+then
+    REFINE="--refine"
+else
+    REFINE=""
+fi
+
+NO_R_SLR=$(jq -r .no_r_slr config.json)
+
+if $NO_R_SLR
+then
+    NO_R_SLR="--no_r_slr"
+else
+    NO_R_SLR=""
+fi
+
+time singularity exec -e docker://brainlife/dipy:1.1.1 dipy_recobundles \
     --force \
     --out_dir output \
-    --b0_threshold $(jq -r .b0_threshold config.json) \
-    --bvecs_tol $(jq -r .bvecs_tol config.json) \
-    $(jq -r .dwi config.json) $(jq -r .bvals config.json) \
-    $(jq -r .bvecs config.json) $(jq -r .mask config.json)
+    --greater_than $(jq -r .greater_than config.json) \
+    --less_than $(jq -r .less_than config.json) \
+    $NO_SLR \
+    --clust_thr $(jq -r .clust_thr config.json) \
+    --reduction_thr $(jq -r .reduction_thr config.json) \
+    --reduction_distance $(jq -r .reduction_distance config.json) \
+    --model_clust_thr $(jq -r .model_clust_thr config.json) \
+    --pruning_thr $(jq -r .pruning_thr config.json) \
+    --pruning_distance $(jq -r .pruning_distance config.json) \
+    --slr_metric $(jq -r .slr_metric config.json) \
+    --slr_transform $(jq -r .slr_transform config.json) \
+    --slr_matrix $(jq -r .slr_matrix config.json) \
+    $REFINE \
+    --r_reduction_thr $(jq -r .r_reduction_thr config.json) \
+    --r_pruning_thr $(jq -r .r_pruning_thr config.json) \
+    $NO_R_SLR \
+    --mix_names \
+    $(jq -r .streamline_files config.json) "$(jq -r .model_bundle_files config.json)"
 
 echo "done"

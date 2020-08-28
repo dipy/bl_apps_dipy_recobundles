@@ -5,4 +5,22 @@
     "bvals": "testdata/data.bvals",
     "bvecs": "testdata/data.bvecs",
     "mask": "testdata/mask.nii.gz"
+    "greater_than": 50,
+    "less_than": 1000000,
+    "no_slr": false,
+    "clust_thr": 15,
+    "reduction_thr": 15,
+    "reduction_distance": "mdf",
+    "model_clust_thr": 2.5,
+    "pruning_thr": 8,
+    "pruning_distance": "mdf",
+    "slr_metric": "symmetric",
+    "slr_transform": "similarity",
+    "slr_matrix": "small",
+    "refine": false,
+    "r_reduction_thr": 12,
+    "r_pruning_thr": 6,
+    "no_r_slr": false,
+    "streamline_files": "testdata/track.trk",
+    "model_bundle_files": "testdata/*.trk"
 }
