@@ -6,7 +6,8 @@ from dipy.data.fetcher import (fetch_bundle_atlas_hcp842,
 from dipy.io.stateful_tractogram import Space, StatefulTractogram
 from dipy.io.streamline import load_tractogram, save_tractogram
 from dipy.segment.bundles import RecoBundles
-from dipy.tracking.streamline import Streamlines
+from matplotlib import cm
+from scipy.io import savemat
 from time import time
 
 
@@ -18,7 +19,7 @@ import os
 
 
 def get_hcp842_atlas_bundles():
-    atlas_dict, atlas_folder = fetch_bundle_atlas_hcp842()
+    fetch_bundle_atlas_hcp842()
     atlas_file, all_bundles_files = get_bundle_atlas_hcp842()
     bundles_fnames = glob.glob(all_bundles_files)
     return bundles_fnames
@@ -27,14 +28,18 @@ def get_hcp842_atlas_bundles():
 if __name__ == '__main__':
     # Create Brainlife's output dirs if don't exist
     out_dir = 'output'
-    if not os.path.exists('output'):
+    if not os.path.exists(out_dir):
         os.mkdir(out_dir)
+
+    wmc_dir = 'wmc'
+    wmc_tracts_dir = os.path.join(wmc_dir, 'tracts')
+    os.makedirs(wmc_tracts_dir, exist_ok=True)
 
     # Read Brainlife's config.json
     with open('config.json', encoding='utf-8') as config_json:
         config = json.load(config_json)
 
-    # TODO: Select atlas
+    # TODO: Atlas selection functionality
     model_bundle_files = config.get('model_bundle_files')
     bundles_fnames = get_hcp842_atlas_bundles()
 
@@ -96,58 +101,23 @@ if __name__ == '__main__':
                                 bbox_valid_check=False)
     streamlines = input_obj.streamlines
 
-    logging.info(' Loading time %0.3f sec' % (time() - t,))
+    logging.info('Loading time %0.3f sec'.format(time() - t))
 
     rb = RecoBundles(streamlines, greater_than=greater_than,
                      less_than=less_than, clust_thr=clust_thr)
 
-    bcode = []
-    blabel = []
-    names = []
-    sls = Streamlines()
-    for ind, mb in enumerate(bundles_fnames[:3]):
-        model_bundle = load_tractogram(mb, 'same',
-                                       bbox_valid_check=False).streamlines
+    names = np.array([], dtype=object)
+    fiber_index = np.array([], dtype='uint8')
 
-        recognized_bundle, labels = rb.recognize(
-            model_bundle, model_clust_thr=model_clust_thr,
-            reduction_thr=reduction_thr, reduction_distance=reduction_distance,
-            pruning_thr=pruning_thr, pruning_distance=pruning_distance,
-            slr=slr, slr_metric=slr_metric, slr_x0=slr_transform,
-            slr_bounds=bounds, slr_select=slr_select, slr_method='L-BFGS-B')
+    tractsfile = []
 
-        sls.extend(recognized_bundle)
-
-        length = len(labels)
-        print(length)
-
-        bcode.extend([ind] * length)
-        if length > 0:
-            blabel.extend(labels.tolist())
-            name = os.path.basename(mb).split('.')[0]
-            names.append(name)
-
-    data_per_streamline = {'bundle_code': bcode, 'bundle_label': blabel}
-
-    sft = StatefulTractogram(sls, streamline_files, Space.RASMM,
-                             data_per_streamline=data_per_streamline)
-    save_tractogram(sft, os.path.join(out_dir, 'track.trk'),
-                    bbox_valid_check=False)
-
-    # TODO: The header cannot be modified. Bundle names should be saved in
-    #  a txt file
-
-    bcode = []
-    bname = []
-    blabel = []
-    sls = Streamlines()
-    for ind, mb in enumerate(bundles_fnames[:3]):
+    for ind, mb in enumerate(bundles_fnames):
         t = time()
         logging.info(mb)
         model_bundle = load_tractogram(mb, 'same',
                                        bbox_valid_check=False).streamlines
-        logging.info(' Loading time %0.3f sec' % (time() - t,))
-        logging.info("model file = ")
+        logging.info('Loading time %0.3f sec'.format(time() - t))
+        logging.info('model file = ')
         logging.info(mb)
 
         recognized_bundle, labels = rb.recognize(
@@ -158,13 +128,14 @@ if __name__ == '__main__':
             slr_bounds=bounds, slr_select=slr_select, slr_method='L-BFGS-B')
 
         if refine:
+
             if len(recognized_bundle) > 1:
+
                 # affine
                 x0 = np.array([0, 0, 0, 0, 0, 0, 1., 1., 1, 0, 0, 0])
-                affine_bounds = [(-30, 30), (-30, 30), (-30, 30),
-                                 (-45, 45), (-45, 45), (-45, 45),
-                                 (0.8, 1.2), (0.8, 1.2), (0.8, 1.2),
-                                 (-10, 10), (-10, 10), (-10, 10)]
+                affine_bounds = [(-30, 30), (-30, 30), (-30, 30), (-45, 45),
+                                 (-45, 45), (-45, 45), (0.8, 1.2), (0.8, 1.2),
+                                 (0.8, 1.2), (-10, 10), (-10, 10), (-10, 10)]
 
                 recognized_bundle, labels = rb.refine(
                     model_bundle, recognized_bundle,
@@ -182,3 +153,58 @@ if __name__ == '__main__':
 
             logging.info("Bundle adjacency Metric {0}".format(ba))
             logging.info("Bundle Min Distance Metric {0}".format(bmd))
+
+        jsonfname = str(len(names)) + '.json'
+
+        tractname = os.path.basename(mb).split('.')[0]
+
+        out_rec = os.path.join(out_dir, 'sub_tracts-' + tractname + '.trk')
+        out_labels = os.path.join(out_dir, 'sub_labels-' + tractname + '.npy')
+
+        new_tractogram = StatefulTractogram(recognized_bundle,
+                                            streamline_files, Space.RASMM)
+        save_tractogram(new_tractogram, out_rec, bbox_valid_check=False)
+        logging.info('Saving output files ...')
+        np.save(out_labels, np.array(labels))
+        logging.info(out_rec)
+        logging.info(out_labels)
+
+        count = len(recognized_bundle)
+        sls = np.zeros([count], dtype=object)
+        for e in range(count):
+            sls[e] = np.transpose(recognized_bundle[e]).round(2)
+        color = list(cm.hsv(len(names)/len(bundles_fnames[:3])))[0: 3]
+
+        logging.info('Sub-sampling for json')
+        if count < 1000:
+            max_count = count
+        else:
+            max_count = 1000
+        jsonfibers = np.reshape(sls[:max_count], [max_count, 1]).tolist()
+        for i in range(max_count):
+            jsonfibers[i] = [jsonfibers[i][0].tolist()]
+
+        with open(os.path.join(wmc_tracts_dir, jsonfname), 'w') as outfile:
+            jsonfile = {'name': tractname, 'color': color,
+                        'coords': jsonfibers}
+            json.dump(jsonfile, outfile)
+
+        splitname = tractname.split('_')
+        fullname = (splitname[-1].capitalize() + ' ' +
+                    ' '.join(splitname[0: -1]))
+        tractsfile.append({'name': fullname, 'color': color,
+                           'filename': jsonfname})
+
+        # For classification.mat
+        # It would be stored like 1, 1, 1, 2, 2, 2, 3, 3, 3, ..., etc.
+        # Matlab is 1-base indexed
+        index = np.full((count,), len(names) + 1, 'uint8')
+        fiber_index = np.append(fiber_index, index)
+        names = np.append(names, tractname.strip())
+
+    with open(os.path.join(wmc_tracts_dir, 'tracts.json'), 'w') as outfile:
+        json.dump(tractsfile, outfile, separators=(',', ': '), indent=4)
+
+    logging.info('Saving classification.mat')
+    savemat(os.path.join(wmc_dir, 'classification.mat'),
+            {'classification': {'names': names, 'index': fiber_index}})

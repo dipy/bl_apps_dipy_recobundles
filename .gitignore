@@ -1,5 +1,6 @@
 .idea
 output
 testdata
+wmc
 config.json
 build.sh
