@@ -40,7 +40,6 @@ if __name__ == '__main__':
         config = json.load(config_json)
 
     # TODO: Atlas selection functionality
-    model_bundle_files = config.get('model_bundle_files')
     bundles_fnames = get_hcp842_atlas_bundles()
 
     streamline_files = config.get('streamline_files')
