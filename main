@@ -6,8 +6,7 @@
 export SINGULARITYENV_OMP_NUM_THREADS=7
 
 set -e
-set -x
 
-singularity exec -e docker://brainlife/validator-neuro-track:1.0 ./main.py
+singularity exec -e docker://brainlife/dipy:1.4.0 ./main.py
 
 echo "done"
